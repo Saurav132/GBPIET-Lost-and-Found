@@ -1,0 +1,8 @@
+{
+  "name": "GBPIET L&F",
+  "description": "Lost and Found platform for GBPIET students.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

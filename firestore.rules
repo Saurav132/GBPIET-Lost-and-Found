@@ -1,0 +1,291 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    // Accept unverified emails temporarily if custom provider is used, wait Google auth usually verifies.
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'sauravdhapola04@gmail.com' || 
+        request.auth.token.email == 'sauravdhapola17@gmail.com' || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN')
+      );
+    }
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email', 'points', 'createdAt']) &&
+        (data.name == null || (data.name is string && data.name.size() <= 100)) &&
+        (data.email == null || (data.email is string && data.email.size() <= 200)) &&
+        data.points is number &&
+        data.createdAt == request.time &&
+        (!data.keys().hasAny(['bio']) || data.bio == null || (data.bio is string && data.bio.size() <= 500)) &&
+        (!data.keys().hasAny(['photoURL']) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000000)) &&
+        (!data.keys().hasAny(['role']) || data.role == null || data.role in ['USER', 'ADMIN']) &&
+        (!data.keys().hasAny(['isRestricted']) || data.isRestricted == null || data.isRestricted is bool) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt == null || data.updatedAt == request.time);
+    }
+    
+    function isValidUserUpdate(data) {
+      return (!data.keys().hasAny(['name']) || data.name == null || (data.name is string && data.name.size() <= 100)) &&
+        (!data.keys().hasAny(['email']) || data.email == null || (data.email is string && data.email.size() <= 200)) &&
+        (!data.keys().hasAny(['points']) || data.points == null || data.points is number) &&
+        (!data.keys().hasAny(['postsCount']) || data.postsCount == null || data.postsCount is number) &&
+        (!data.keys().hasAny(['resolvedCount']) || data.resolvedCount == null || data.resolvedCount is number) &&
+        (!data.keys().hasAny(['bio']) || data.bio == null || (data.bio is string && data.bio.size() <= 500)) &&
+        (!data.keys().hasAny(['photoURL']) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000000)) &&
+        (!data.keys().hasAny(['role']) || data.role == null || data.role in ['USER', 'ADMIN']) &&
+        (!data.keys().hasAny(['isRestricted']) || data.isRestricted == null || data.isRestricted is bool) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt == null || data.updatedAt == request.time);
+    }
+
+    function isValidItem(data) {
+      return data.keys().hasAll(['type', 'title', 'description', 'category', 'status', 'ownerId', 'createdAt']) &&
+        data.type in ['LOST', 'FOUND'] &&
+        data.title is string && data.title.size() <= 200 && data.title.size() > 0 &&
+        data.description is string && data.description.size() <= 2000 &&
+        data.category is string && data.category.size() <= 100 &&
+        data.status in ['OPEN', 'CLAIMED', 'RESOLVED'] &&
+        data.ownerId is string && data.ownerId == request.auth.uid &&
+        data.createdAt == request.time &&
+        (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
+        (!data.keys().hasAny(['lat']) || data.lat is number) &&
+        (!data.keys().hasAny(['lng']) || data.lng is number) &&
+        (!data.keys().hasAny(['pickupAddress']) || (data.pickupAddress is string && data.pickupAddress.size() <= 500)) &&
+        (!data.keys().hasAny(['securityQuestion']) || (data.securityQuestion is string && data.securityQuestion.size() <= 500));
+    }
+    
+    function isValidItemUpdate(data) {
+      return data.type in ['LOST', 'FOUND'] &&
+        data.title is string && data.title.size() <= 200 && data.title.size() > 0 &&
+        data.description is string && data.description.size() <= 2000 &&
+        (!data.keys().hasAny(['category']) || (data.category is string && data.category.size() <= 100)) &&
+        data.status in ['OPEN', 'CLAIMED', 'RESOLVED'] &&
+        data.ownerId is string &&
+        (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
+        (!data.keys().hasAny(['lat']) || data.lat is number) &&
+        (!data.keys().hasAny(['lng']) || data.lng is number) &&
+        (!data.keys().hasAny(['pickupAddress']) || (data.pickupAddress is string && data.pickupAddress.size() <= 500)) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt == request.time) &&
+        (!data.keys().hasAny(['securityQuestion']) || (data.securityQuestion is string && data.securityQuestion.size() <= 500));
+    }
+
+    function isValidItemAnswer(data) {
+      return data.keys().hasAll(['answer', 'createdAt']) &&
+        data.answer is string && data.answer.size() <= 1000 &&
+        data.createdAt == request.time;
+    }
+
+    function isValidClaim(data) {
+      return data.keys().hasAll(['claimantId', 'ownerId', 'itemId', 'answer', 'status', 'attempts', 'createdAt', 'updatedAt']) &&
+        data.claimantId is string && data.claimantId == request.auth.uid &&
+        data.ownerId is string && data.ownerId.size() > 0 &&
+        data.itemId is string && data.itemId.size() > 0 &&
+        data.answer is string && data.answer.size() <= 1000 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        data.attempts is number &&
+        data.createdAt == request.time &&
+        data.updatedAt == request.time;
+    }
+    
+    function isValidClaimUpdate(data) {
+      return data.claimantId is string && 
+        data.ownerId is string && data.ownerId.size() > 0 &&
+        data.itemId is string && data.itemId.size() > 0 &&
+        data.answer is string && data.answer.size() <= 1000 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        data.attempts is number &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidChat(data) {
+      return data.keys().hasAll(['itemId', 'participant1Id', 'participant2Id', 'createdAt', 'updatedAt']) &&
+        data.itemId is string && data.itemId.size() > 0 &&
+        data.participant1Id is string && data.participant1Id.size() > 0 &&
+        data.participant2Id is string && data.participant2Id.size() > 0 &&
+        (!data.keys().hasAny(['resolvedByOwner']) || data.resolvedByOwner is bool) &&
+        (!data.keys().hasAny(['resolvedByFinder']) || data.resolvedByFinder is bool) &&
+        (!data.keys().hasAny(['status']) || data.status in ['active', 'resolved']) &&
+        data.createdAt == request.time &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidChatUpdate(data) {
+      return data.itemId is string && data.itemId.size() > 0 &&
+        data.participant1Id is string && data.participant1Id.size() > 0 &&
+        data.participant2Id is string && data.participant2Id.size() > 0 &&
+        (!data.keys().hasAny(['resolvedByOwner']) || data.resolvedByOwner is bool) &&
+        (!data.keys().hasAny(['resolvedByFinder']) || data.resolvedByFinder is bool) &&
+        (!data.keys().hasAny(['status']) || data.status in ['active', 'resolved']) &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['chatId', 'participant1Id', 'participant2Id', 'senderId', 'createdAt']) &&
+        data.chatId is string && data.chatId.size() > 0 &&
+        data.participant1Id is string && data.participant1Id.size() > 0 &&
+        data.participant2Id is string && data.participant2Id.size() > 0 &&
+        data.senderId is string && data.senderId == request.auth.uid &&
+        (!data.keys().hasAny(['text']) || (data.text is string && data.text.size() <= 2000)) &&
+        (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
+        (
+          (data.keys().hasAny(['text']) && data.text.size() > 0) || 
+          (data.keys().hasAny(['imageUrl']) && data.imageUrl.size() > 0)
+        ) &&
+        data.createdAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid &&
+        isValidUser(incoming()) && incoming().email == request.auth.token.email;
+      allow update: if isSignedIn() && isValidId(userId) && isValidUserUpdate(incoming()) && (
+        (userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'bio', 'points', 'postsCount', 'resolvedCount', 'updatedAt']) &&
+        incoming().points >= existing().get('points', 0) - 20 && incoming().points <= existing().get('points', 0) + 50) ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'bio', 'points', 'postsCount', 'resolvedCount', 'role', 'updatedAt', 'isRestricted']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /items/{itemId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(itemId) && 
+        isValidItem(incoming()) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)) != null;
+      allow update: if isSignedIn() && isValidId(itemId) && existing().ownerId == request.auth.uid &&
+        isValidItemUpdate(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'imageUrl', 'status', 'securityQuestion', 'lat', 'lng', 'pickupAddress', 'updatedAt']) &&
+        (existing().status == 'OPEN' || incoming().status == existing().status);
+      allow delete: if isSignedIn() && isValidId(itemId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /itemAnswers/{itemId} {
+      allow get, list: if false; // Answer should never be read directly by clients to ensure security.
+      allow create: if isSignedIn() && isValidId(itemId) && isValidItemAnswer(incoming());
+      allow update: if false;
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    match /claims/{claimId} {
+      allow get: if isSignedIn() && (existing().claimantId == request.auth.uid || existing().ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.claimantId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidId(claimId) && 
+        isValidClaim(incoming()) &&
+        get(/databases/$(database)/documents/items/$(incoming().itemId)).data.ownerId == incoming().ownerId &&
+        (!exists(/databases/$(database)/documents/itemAnswers/$(incoming().itemId)) || 
+          incoming().answer == get(/databases/$(database)/documents/itemAnswers/$(incoming().itemId)).data.answer);
+
+      allow update: if isSignedIn() && isValidId(claimId) &&
+        isValidClaimUpdate(incoming()) &&
+        incoming().claimantId == existing().claimantId &&
+        incoming().itemId == existing().itemId &&
+        incoming().ownerId == existing().ownerId && 
+        (
+          (existing().claimantId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['attempts', 'answer', 'updatedAt'])) ||
+          (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && existing().status == 'PENDING')
+        );
+    }
+
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && (isAdmin() || existing().participant1Id == request.auth.uid || existing().participant2Id == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.participant1Id == request.auth.uid || resource.data.participant2Id == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidId(chatId) &&
+        isValidChat(incoming()) &&
+        (incoming().participant1Id == request.auth.uid || incoming().participant2Id == request.auth.uid);
+
+      allow update: if isSignedIn() && isValidId(chatId) &&
+        (existing().participant1Id == request.auth.uid || existing().participant2Id == request.auth.uid) &&
+        isValidChatUpdate(incoming()) &&
+        incoming().participant1Id == existing().participant1Id &&
+        incoming().participant2Id == existing().participant2Id &&
+        incoming().itemId == existing().itemId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'resolvedByOwner', 'resolvedByFinder', 'status']);
+        
+      allow delete: if isSignedIn() && (isAdmin() || existing().participant1Id == request.auth.uid || existing().participant2Id == request.auth.uid);
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow get: if isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/chats/$(chatId)) && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participant1Id == request.auth.uid || 
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participant2Id == request.auth.uid
+        ))
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/chats/$(chatId)) && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participant1Id == request.auth.uid || 
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participant2Id == request.auth.uid
+        ))
+      );
+
+      allow create: if isSignedIn() && isValidId(chatId) && isValidId(messageId) &&
+        isValidChatMessage(incoming()) &&
+        (incoming().participant1Id == request.auth.uid || incoming().participant2Id == request.auth.uid);
+        
+      allow delete: if isSignedIn() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/chats/$(chatId)).data.participant1Id == request.auth.uid || 
+        get(/databases/$(database)/documents/chats/$(chatId)).data.participant2Id == request.auth.uid
+      );
+    }
+    function isValidNotification(data) {
+      return data.keys().hasAll(['message', 'itemId', 'createdAt']) &&
+        (
+          (data.keys().hasAll(['userId', 'read']) && data.userId is string && data.userId == request.auth.uid && data.read is bool) ||
+          (data.keys().hasAll(['type']) && data.type == 'NEW_POST')
+        ) &&
+        data.message is string && data.message.size() <= 1000 &&
+        data.itemId is string && data.itemId.size() <= 128 &&
+        data.createdAt == request.time;
+    }
+
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && (
+        (resource.data.keys().hasAny(['userId']) && resource.data.userId == request.auth.uid) ||
+        (resource.data.keys().hasAny(['type']) && resource.data.type == 'NEW_POST')
+      );
+      // Anyone can create a notification for another user, e.g. system finding a match
+      // Also anyone can create a global NEW_POST notification
+      allow create: if isSignedIn() && isValidId(notificationId) &&
+        incoming().keys().hasAll(['message', 'itemId', 'createdAt']) &&
+        (
+          (incoming().keys().hasAll(['userId', 'read']) && incoming().userId is string && incoming().read is bool) ||
+          (incoming().keys().hasAll(['type']) && incoming().type == 'NEW_POST')
+        ) &&
+        incoming().message is string &&
+        incoming().itemId is string &&
+        incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidId(notificationId) &&
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && isValidId(notificationId) && existing().userId == request.auth.uid;
+    }
+
+    match /reports/{reportId} {
+      allow get, list, delete: if isAdmin();
+      allow update: if false;
+      allow create: if isSignedIn() && isValidId(reportId) &&
+        incoming().keys().hasAll(['itemId', 'reportedBy', 'reason', 'createdAt']) &&
+        incoming().itemId is string &&
+        incoming().reportedBy is string && incoming().reportedBy == request.auth.uid &&
+        incoming().reason is string && incoming().reason.size() <= 500 &&
+        incoming().createdAt == request.time;
+    }
+
+  }
+}

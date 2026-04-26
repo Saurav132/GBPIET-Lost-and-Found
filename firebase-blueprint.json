@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "points": { "type": "number" },
+        "role": { "type": "string", "enum": ["USER", "ADMIN"] },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["name", "email", "points", "createdAt"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "A lost or found item.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["LOST", "FOUND"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "category": { "type": "string" },
+        "securityQuestion": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "CLAIMED", "RESOLVED"] },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["type", "title", "description", "category", "status", "ownerId", "createdAt"]
+    },
+    "ItemAnswer": {
+      "title": "ItemAnswer",
+      "description": "Secure answer for a found item's security question.",
+      "type": "object",
+      "properties": {
+        "answer": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["answer", "createdAt"]
+    },
+    "Claim": {
+      "title": "Claim",
+      "description": "Claim attempt for an item.",
+      "type": "object",
+      "properties": {
+        "claimantId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "answer": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "attempts": { "type": "number" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["claimantId", "ownerId", "itemId", "answer", "status", "attempts", "createdAt", "updatedAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Chat session between two users for an item.",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string" },
+        "participant1Id": { "type": "string" },
+        "participant2Id": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["itemId", "participant1Id", "participant2Id", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A single message in a chat.",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "participant1Id": { "type": "string" },
+        "participant2Id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["chatId", "participant1Id", "participant2Id", "senderId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles."
+    },
+    "/items/{itemId}": {
+      "schema": { "$ref": "#/entities/Item" },
+      "description": "Lost and Found items."
+    },
+    "/itemAnswers/{itemId}": {
+      "schema": { "$ref": "#/entities/ItemAnswer" },
+      "description": "Secure answers for items."
+    },
+    "/claims/{claimId}": {
+      "schema": { "$ref": "#/entities/Claim" },
+      "description": "Claims submitted for items."
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Chat sessions."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages inside a chat."
+    }
+  }
+}
